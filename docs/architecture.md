@@ -7,7 +7,7 @@ Write this file in B2 English. Follow `.agents/rules/communication.md`.
 
 A 3D-printed lamp shade in the shape of a cat. It replaces the fabric shade of an E14 table lamp.
 Fixed requirements: 250 mm high (was 200 mm in round 1), fits in a Ø160 mm cylinder, mounting ring Ø47 / Ø28 mm, 5 mm thick,
-67 mm above the lower edge, printed in white without supports.
+120 mm above the lower edge (round 6; was 67 mm), printed in white without supports.
 
 ## Repository layout
 

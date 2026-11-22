@@ -20,12 +20,16 @@ ROOT = pathlib.Path(__file__).resolve().parent
 OUT = ROOT / "renders"
 MM = 0.001
 
-# Lamp base, estimated from the owner's photo (mm, shade coordinates: z = 0 is the cat's lower edge)
-EGG_D, EGG_H = 105.0, 120.0
-EGG_TOP = -15.0
-SHOULDER_Z = 54.4          # adapter bottom = socket shoulder (cat_shade.adapter_z0)
-BULB_D, BULB_L, BULB_Z0 = 45.0, 70.0, 75.0
+# Sizes come from the model (mm, shade coordinates: z = 0 is the cat's lower edge)
+sys.path.insert(0, str(ROOT))
+import cat_shade as cs  # noqa: E402
+
+EGG_D, EGG_H = cs.EGG_D, cs.EGG_H
+SHOULDER_Z = cs.adapter_z0()           # adapter bottom = socket shoulder
+EGG_TOP = SHOULDER_Z - cs.SOCKET_LEN   # may be above 0: the cat then hangs over the egg
+BULB_D, BULB_L, BULB_Z0 = cs.BULB_D, cs.BULB_L, cs.RING_Z + cs.BULB_GAP
 TABLE_Z = EGG_TOP - EGG_H
+MID = (TABLE_Z + cs.H) / 2
 
 QUICK = "--quick" in sys.argv
 ONLY = sys.argv[sys.argv.index("--only") + 1] if "--only" in sys.argv else None
@@ -157,9 +161,9 @@ def camera(sc, loc, target, lens):
 
 
 SHOTS = {
-    "night_front": dict(evening=False, loc=(420, -880, 120), target=(0, 0, 45), lens=68),
-    "night_side": dict(evening=False, loc=(940, -120, 60), target=(0, 0, 45), lens=68),
-    "evening_front": dict(evening=True, loc=(420, -880, 120), target=(0, 0, 45), lens=68),
+    "night_front": dict(evening=False, loc=(420, -880, MID + 75), target=(0, 0, MID), lens=68),
+    "night_side": dict(evening=False, loc=(940, -120, MID + 15), target=(0, 0, MID), lens=68),
+    "evening_front": dict(evening=True, loc=(420, -880, MID + 75), target=(0, 0, MID), lens=68),
 }
 
 

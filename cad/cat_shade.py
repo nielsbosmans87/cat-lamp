@@ -38,10 +38,12 @@ import sketch as sk  # noqa: E402  (catmull, lens, teardrop helpers)
 H = 250.0            # total height, ear tips
 ENV_R = 80.0         # must fit in a cylinder of this radius (Ø160)
 NECK = 140.0         # joint between body and head
-RING_Z = 67.0        # top face of the mounting ring
+RING_Z = 120.0       # top face of the mounting ring (round 6: sunk from 67, the cat covers more of the lamp)
 RING_OD, RING_ID, RING_T = 47.0, 28.0, 5.0
 WALL = 2.5           # lead / full wall thickness
 SKIN = 1.0           # thin glowing panel thickness
+EAR_WALL = 1.2       # ear wall: thin, so the ears glow like the panels
+ROOF_Z0, ROOF_Z1 = 214.0, 222.0   # head roof: wall tapers from WALL to SKIN here (roof is too flat for panels)
 SKIN_BRIGHT = 0.7    # extra thin, extra bright: eyes, mouth, nose, heart, inner ears (SKIN - one STEP)
 EMBOSS = 0.9         # leads stand this far proud of the outside
 STEP = 0.3           # max ledge width inside recesses and under embossing
@@ -53,6 +55,7 @@ WIN_R0 = 27.0        # radius where the pointed inner end of each window starts
 WIN_TAPER = 0.25     # half-width growth per mm of radius (keeps the window tops near 45 degrees)
 RIB_T_BOTTOM = 4.0   # rib under each spoke: thickness where it starts on the bed at the wall
 RIB_T_TOP = 2.4      # rib thickness where it meets the ring
+RIB_EDGE = 40.0      # rib bottom edge, degrees from vertical (< 45: prints without supports)
 ADAPTER_OD = 40.0    # separate adapter ring: flat bottom on the socket shoulder, cone on top
 ADAPTER_BASE = 1.5   # adapter thickness at its outer edge
 ADAPTER_GAP = 0.1    # clearance between adapter cone and shade cone
@@ -64,6 +67,10 @@ N_RING = 192         # points per cross-section
 DZ = 0.5             # loft step
 TENT = 1.6           # opening tops: dz/du of the pointed top (>= 1.28 keeps 45 degrees on the real surface)
 SEED = 57
+BULB_D, BULB_L = 45.0, 70.0   # E14 bulb envelope (glass, without the screw base)
+BULB_GAP = 8.0       # glass starts this far above the ring top
+EGG_D, EGG_H = 105.0, 120.0   # ceramic lamp base, estimated from the owner's photo
+SOCKET_LEN = 69.4    # socket from the top of the egg to the shoulder (estimated)
 
 # ---- Outline profiles (from the 1C sketch, mm): (z, value) ------------------------------------
 XR = [(0, 70), (22, 73), (48, 73), (72, 70), (96, 63), (116, 53), (133, 44), (139, 41.5), (152, 52.5),
@@ -100,6 +107,15 @@ def extents(z, d=0.0):
         slope = np.interp(z, g, dv)
         out.append(val - d * math.sqrt(1 + slope * slope))
     return out
+
+
+def wall_d(z):
+    """Wall thickness at height z: WALL, tapering to SKIN over the head roof so the top glows evenly."""
+    if z <= ROOF_Z0:
+        return WALL
+    if z >= ROOF_Z1:
+        return SKIN
+    return WALL + (SKIN - WALL) * (z - ROOF_Z0) / (ROOF_Z1 - ROOF_Z0)
 
 
 def check_profiles():
@@ -211,10 +227,12 @@ def design():
     rng = random.Random(SEED)
     lead_lines, lead_polys = [], []   # (LineString, width) and filled shapes
     # -- body mosaic ------------------------------------------------------------------------
-    BZ0, BZ1 = 27.0, 133.0
+    BZ0, BZ1 = 3.0, 133.0
     dom = box(-U_HALF, BZ0, U_HALF, BZ1)
     heart = front_poly(heart_pts(0, 86, 1.4))
-    keep_out = heart.buffer(4)
+    paws_poly = unary_union([front_poly([(s * 4, 0.5), (s * 4, 12), (s * 9, 21), (s * 17, 23), (s * 25, 20),
+                                         (s * 29, 11), (s * 29, 0.5)]) for s in (1, -1)])
+    keep_out = unary_union([heart.buffer(4), paws_poly.buffer(3)])
     seeds = []
     while len(seeds) < 48:
         p = (rng.uniform(-U_HALF, U_HALF), rng.uniform(BZ0 + 4, BZ1 - 4))
@@ -231,7 +249,7 @@ def design():
         for g in getattr(cc, "geoms", [cc]):
             if g.geom_type == "Polygon":
                 edges.append(g.exterior.difference(seam))
-    mosaic = unary_union(edges).difference(heart)  # ribs run into the heart outline
+    mosaic = unary_union(edges).difference(unary_union([heart, paws_poly]))  # ribs end at the heart and paw outlines
     lead_lines.append((mosaic, WALL))
     lead_lines.append((heart.exterior, WALL * 1.2))
     for z in (BZ0, BZ1):
@@ -245,7 +263,7 @@ def design():
     tail = sk.catmull([(68, 4), (62, 12), (50, 17), (39, 16), (33, 10)], n=10)
     lead_lines.append((front_line(tail), 2.4))
     # -- head ---------------------------------------------------------------------------------
-    HZ0, HZ1 = 146.0, 212.0
+    HZ0, HZ1 = 146.0, 220.0
     hdom = box(-U_HALF, HZ0, U_HALF, HZ1)
     w = 70.0
     face = []
@@ -282,7 +300,9 @@ def design():
         lead_lines.append((g.exterior, 1.6))    # rib frame round each bright feature
     leads = unary_union([g.buffer(wd / 2, cap_style=1, join_style=1) for g, wd in lead_lines] + lead_polys)
     bright_u = bright_u.difference(leads)
-    panel_area = unary_union([dom.difference(heart.buffer(WALL * 0.6)), hdom])
+    ears_uz = unary_union([box(s * 44.0, 205.0, s * 91.0, 300.0) if s > 0 else box(-91.0, 205.0, -44.0, 300.0)
+                           for s in (1, -1)])  # ear bases stay solid where they join the head
+    panel_area = unary_union([dom.difference(heart.buffer(WALL * 0.6)), hdom]).difference(ears_uz)
     panels = panel_area.difference(leads).difference(bright_u.buffer(0.01))
     panels = [g for g in getattr(panels, "geoms", [panels]) if g.area > 3]
     bright_panels = [g for g in getattr(bright_u, "geoms", [bright_u]) if g.area > 2]
@@ -344,7 +364,7 @@ def wedge(geom, r0=3.0, r1=115.0):
 def ear(sign, inner=False):
     """Ear as the hull of a patch of head surface and a short tip ridge. inner=True gives the hollow.
     The patch is limited so the inner edge of the ear leans out at 45 degrees at most."""
-    d = WALL + 0.6 if inner else 0.4
+    d = EAR_WALL + 0.6 if inner else 0.4
     tip_x, tip_y = 50.0, -19.0
     pts = []
     for z in np.arange(208, 235, 1.0):
@@ -359,9 +379,9 @@ def ear(sign, inner=False):
         c = np.array([sign * 49.0, tip_y])
         v = pts[:, :2] - c
         n = np.linalg.norm(v, axis=1, keepdims=True)
-        pts[:, :2] = c + v * np.maximum(n - WALL, 0.5) / np.maximum(n, 1e-6)
+        pts[:, :2] = c + v * np.maximum(n - EAR_WALL, 0.5) / np.maximum(n, 1e-6)
         pts[:, 2] -= 1.5
-        tip = np.array([[sign * tip_x, tip_y, H - WALL * 2.6]])
+        tip = np.array([[sign * tip_x, tip_y, H - EAR_WALL * 2.6]])
     return Manifold.hull_points(np.vstack([pts, tip]))
 
 
@@ -399,15 +419,15 @@ def bowl_windows():
             right.append((r * math.cos(a), r * math.sin(a)))
         poly = np.array(left + right[::-1][:-1])
         cs = CrossSection([poly], m3.FillRule.EvenOdd).rotate(math.degrees(k * pitch + pitch / 2))
-        wins.append(Manifold.extrude(cs, 90.0).translate([0, 0, -10.0]))
+        wins.append(Manifold.extrude(cs, RING_Z + 20.0).translate([0, 0, -10.0]))
     return Manifold.batch_boolean(wins, m3.OpType.Add)
 
 
 def bowl_ribs():
-    """A triangular rib under each spoke, in the radial plane. It starts on the build plate at the
-    inside wall and rises in a straight edge to the ring, so every layer rests on the one below.
-    Thick at the bottom (RIB_T_BOTTOM), thinner at the ring (RIB_T_TOP).
-    Returns the ribs and the steepest bottom-edge angle from vertical (must be <= 45)."""
+    """A triangular rib under each spoke, in the radial plane. It starts on the inside wall and rises
+    in a straight edge at RIB_EDGE degrees from vertical to the ring, so every layer rests on the one
+    below. Thick at the wall (RIB_T_BOTTOM), thinner at the ring (RIB_T_TOP).
+    Returns the ribs, the steepest bottom-edge angle and the lowest start height on the wall."""
     ri, ro = RING_ID / 2, RING_OD / 2
     zl = RING_Z - RING_T
     zo = zl - (ro - ri) + BOWL_T * math.sqrt(2)
@@ -416,22 +436,33 @@ def bowl_ribs():
     ang = np.arctan2(rp[:, 1], rp[:, 0])
     rad = np.hypot(rp[:, 0], rp[:, 1])
     pitch = 2 * math.pi / BOWL_WINDOWS
-    ribs, worst = [], 0.0
+    ribs, worst, lowest = [], 0.0, 1e9
     top_ring = (ro - 0.5, zo - 0.2)
+    tan_e = math.tan(math.radians(RIB_EDGE))
+
+    def wall_r(phi, z):
+        rp_z = ring_pts(z, WALL)
+        a_z = np.arctan2(rp_z[:, 1], rp_z[:, 0])
+        dd = np.abs((a_z - phi + np.pi) % (2 * np.pi) - np.pi)
+        return float(np.hypot(rp_z[:, 0], rp_z[:, 1])[np.argmin(dd)]) + 1.5
     for k in range(BOWL_WINDOWS):
         phi = k * pitch
-        d = np.abs((ang - phi + np.pi) % (2 * np.pi) - np.pi)
-        r_w = float(rad[np.argmin(d)]) + 1.5
+        z_w = 0.0
+        for _ in range(3):  # the wall leans, so find where the 40-degree edge meets it
+            r_w = wall_r(phi, z_w)
+            z_w = max(0.0, min(top_ring[1] - (r_w - top_ring[0]) / tan_e, z_up(r_w) - 3.0))
+        r_w = wall_r(phi, z_w)
         e = np.array([math.cos(phi), math.sin(phi), 0.0])
         t = np.array([-math.sin(phi), math.cos(phi), 0.0])
         pts = []
-        for (r, z), th in (((r_w, 0.0), RIB_T_BOTTOM), ((r_w, z_up(r_w) - 0.3), RIB_T_BOTTOM),
+        for (r, z), th in (((r_w, z_w), RIB_T_BOTTOM), ((r_w, z_up(r_w) - 0.3), RIB_T_BOTTOM),
                            (top_ring, RIB_T_TOP)):
             for sgn in (-1, 1):
                 pts.append(r * e + sgn * th / 2 * t + np.array([0, 0, z]))
         ribs.append(Manifold.hull_points(np.array(pts)))
-        worst = max(worst, math.degrees(math.atan2(r_w - top_ring[0], top_ring[1])))
-    return Manifold.batch_boolean(ribs, m3.OpType.Add), worst
+        worst = max(worst, math.degrees(math.atan2(r_w - top_ring[0], top_ring[1] - z_w)))
+        lowest = min(lowest, z_w)
+    return Manifold.batch_boolean(ribs, m3.OpType.Add), worst, lowest
 
 
 def adapter_z0():
@@ -470,7 +501,7 @@ def build():
     leads, panels, bright, doms = design()
     print(f"pattern: {len(panels)} panels, {len(bright)} bright features, no side openings")
     outer = loft(0.0, 0.0, Z_TOP)
-    inner = loft(WALL, -1.0, Z_TOP)
+    inner = loft(0.0, -1.0, Z_TOP, d_fn=wall_d)
     shell = (outer + ear(1) + ear(-1)) - (inner + ear(1, True) + ear(-1, True))
     # thin panels, recessed from the inside in STEP stages; bright features go one stage deeper
     P = unary_union(panels)
@@ -488,12 +519,12 @@ def build():
     shell -= ear_glow(1) + ear_glow(-1)
     # embossed leads, with a stepped underside
     emb = Manifold()
-    lead_area = leads.intersection(box(-U_HALF, 0.0, U_HALF, Z_TOP - 14))
+    lead_area = leads.intersection(box(-U_HALF, 0.0, U_HALF, Z_TOP - 4))
     steps = np.arange(0.0, EMBOSS - 1e-6, STEP)
     for i, d in enumerate(steps):
         band = loft(-(d + STEP), 0.0, Z_TOP - 0.5) - loft(-d - 0.0, -1.0, Z_TOP)
         emb += wedge(raise_bottom(lead_area, (i + 1) * STEP_DZ)) ^ band
-    emb = (emb + (wedge(lead_area) ^ loft(-0.01, 0.0, Z_TOP))) - inner
+    emb = (emb + (wedge(lead_area) ^ loft(-0.01, 0.0, Z_TOP))) - inner - (ear(1, True) + ear(-1, True))
     shell += emb
     # ridge vent between the ears
     shell -= Manifold.cube([56, 5, 20], True).translate([0, 0, Z_TOP])
@@ -501,8 +532,8 @@ def build():
     head = shell.trim_by_plane([0, 0, 1], NECK)
     bowl = ring_and_bowl() ^ loft(0.4, 0.0, NECK)
     bowl -= bowl_windows() ^ loft(WALL + 4.0, -1.0, NECK)
-    ribs, rib_angle = bowl_ribs()
-    print(f"bowl ribs: start on the bed at the wall, steepest bottom edge {rib_angle:.1f} deg from vertical (limit 45)")
+    ribs, rib_angle, rib_low = bowl_ribs()
+    print(f"bowl ribs: start on the wall from z {rib_low:.1f}, steepest bottom edge {rib_angle:.1f} deg from vertical (limit 45)")
     bowl += ribs ^ loft(0.4, 0.0, NECK)
     body = body + bowl + lip_and_support()
     return main_solid(body), main_solid(head), adapter(), (leads, panels, bright, doms)
@@ -564,9 +595,35 @@ def export_clean(man, path):
     return final, out
 
 
+def clearances():
+    """Bulb, neck opening and estimated egg clearances (mm). Prints and returns them."""
+    zb0 = RING_Z + BULB_GAP
+    lip_d = WALL + LIP_GAP + LIP_T
+    side = []
+    for z in np.arange(zb0, zb0 + BULB_L, 1.0):
+        t = (z - (zb0 + BULB_L / 2)) / (BULB_L / 2)
+        rb = BULB_D / 2 * math.sqrt(max(0.0, 1 - t * t))
+        d = lip_d if NECK - 6 <= z <= NECK + LIP_H else WALL
+        side.append(min(extents(z, d)) - rb)
+    inner_top = max(z for z in np.arange(NECK, Z_TOP, 0.5) if min(extents(z, WALL)) > 0.8)
+    neck = min(min(2 * extents(z, lip_d)[0], sum(extents(z, lip_d)[1:])) for z in np.arange(NECK, NECK + LIP_H, 0.5))
+    egg_top = adapter_z0() - SOCKET_LEN
+    a, c = EGG_D / 2, EGG_H / 2
+    egg_wall = 99.0
+    for z in np.arange(0.0, max(0.0, egg_top), 0.5):
+        u = (egg_top - c - z) / c
+        r_egg = a * math.sqrt(max(0.0, 1 - u * u))
+        egg_wall = min(egg_wall, min(extents(z, WALL)) - r_egg)
+    out = dict(bulb_side=round(min(side), 1), bulb_top=round(inner_top - (zb0 + BULB_L), 1),
+               neck_opening=round(neck, 1), egg_top_inside_cat=round(egg_top, 1), egg_clearance=round(egg_wall, 1))
+    print("clearances:", out)
+    return out
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     print(f"profile: steepest outward slope {check_profiles():.1f} deg (limit 45)")
+    clearances()
     body, head, adp, pat = build()
     report = []
     fit = (adp ^ body).volume()

@@ -28,3 +28,11 @@ With three or six ribs, the lowest layer of the ring hangs in the air between th
 
 - Light goes down through the bowl windows. Air comes in there and leaves through the ridge vent.
 - Changing the bulb always means lifting the head first.
+
+## Update (round 6): ring at 120 mm
+
+- The owner wanted the cat to cover more of the lamp. The ring top moved from 67 mm to 120 mm above the lower edge.
+  The cat now hangs about 38 mm over the top of the ceramic base (estimated size).
+- The ribs under the spokes no longer start at the bed (they would be very large). They start on the inside wall
+  with a bottom edge at 40 degrees from vertical, from z 45.8 upwards.
+- A 200 mm version (80 % scale) was considered and dropped: the bulb would sit too close to the head roof.
