@@ -17,7 +17,7 @@ Fixed requirements: 250 mm high (was 200 mm in round 1), fits in a Ø160 mm cyli
 | `tools/sketch_v2.py` | Round 2 sketches: variations of concept 1, built on `tools/sketch.py` |
 | `sketches/` | Concept sketches (SVG); round 2 in `sketches/round-2/` |
 | `cad/cat_shade.py` | Parametric 3D model of concept 1C: builds, checks and exports both parts |
-| `cad/out/` | Print files: `cat_shade_body` and `cat_shade_head` (.stl and .3mf), `pattern.svg` |
+| `cad/out/` | Print files: `cat_shade_body`, `cat_shade_head` and `cat_shade_adapter` (.stl and .3mf), `pattern.svg` |
 | `cad/renders/` | Review renders of the current model |
 | `.agents/` | Shared agent kit (git submodule, refaqt/refaqt-agents) |
 | `docs/` | Log, decisions, mistakes |

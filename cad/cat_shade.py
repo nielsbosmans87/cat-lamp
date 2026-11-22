@@ -42,10 +42,18 @@ RING_Z = 67.0        # top face of the mounting ring
 RING_OD, RING_ID, RING_T = 47.0, 28.0, 5.0
 WALL = 2.5           # lead / full wall thickness
 SKIN = 1.0           # thin glowing panel thickness
+SKIN_BRIGHT = 0.7    # extra thin, extra bright: eyes, mouth, nose, heart, inner ears (SKIN - one STEP)
 EMBOSS = 0.9         # leads stand this far proud of the outside
 STEP = 0.3           # max ledge width inside recesses and under embossing
 STEP_DZ = 0.6        # vertical shift per step; > STEP so ledges stay within 45 degrees on sloped walls too
 BOWL_T = 1.2         # normal thickness of the 45-degree bowl under the ring
+BOWL_WINDOWS = 24    # light windows in the bowl, between radial spokes
+SPOKE_W = 3.0        # spoke width between bowl windows
+WIN_R0 = 27.0        # radius where the pointed inner end of each window starts
+WIN_TAPER = 0.25     # half-width growth per mm of radius (keeps the window tops near 45 degrees)
+ADAPTER_OD = 40.0    # separate adapter ring: flat bottom on the socket shoulder, cone on top
+ADAPTER_BASE = 1.5   # adapter thickness at its outer edge
+ADAPTER_GAP = 0.1    # clearance between adapter cone and shade cone
 LIP_H, LIP_T, LIP_GAP = 6.0, 2.2, 0.4  # locating lip on the body for the head
 SUPER_N = 2.2        # cross-section shape (2 = ellipse, higher = squarer)
 RREF = 60.0          # reference radius for the unwrapped pattern
@@ -204,7 +212,6 @@ def design():
     BZ0, BZ1 = 27.0, 133.0
     dom = box(-U_HALF, BZ0, U_HALF, BZ1)
     heart = front_poly(heart_pts(0, 86, 1.4))
-    window = front_poly(sk.teardrop(0, 84, 6.0, n=24))
     keep_out = heart.buffer(4)
     seeds = []
     while len(seeds) < 48:
@@ -240,21 +247,25 @@ def design():
     hdom = box(-U_HALF, HZ0, U_HALF, HZ1)
     w = 70.0
     face = []
+    bright = [heart.buffer(-WALL * 0.6)]   # extra-bright features, each framed by a rib
     for s in (1, -1):
         ex, ez = 26, 180
-        face.append((sk.catmull([(s * ex - 10, ez - 3), (s * ex, ez + 6), (s * ex + 10, ez - 3)], n=8), 2.4))
+        upper = sk.catmull([(s * ex - 11, ez - 3), (s * ex, ez + 7), (s * ex + 11, ez - 3)], n=10)
+        lower = sk.catmull([(s * ex + 8, ez - 3.5), (s * ex, ez + 2.5), (s * ex - 8, ez - 3.5)], n=10)
+        crescent = front_poly(upper + lower)
+        bright.append(crescent)
         face.append((sk.catmull([(s * (w - 9), 171), (s * 30, 165), (s * 16, 150), (0, 145.5)], n=10), WALL))
         for k in range(3):
             face.append(([(s * 14, 160 + k * 3.5), (s * (w - 20), 157 + k * 7 - 4)], 1.3))
     face.append((sk.catmull([(-w + 4, 196), (-34, 203), (0, 206), (34, 203), (w - 4, 196)], n=10), WALL))
-    face.append(([(0, 163.5), (0, 160)], 1.4))
-    face.append((sk.catmull([(0, 160), (-4, 156.5), (-8.5, 159)], n=6), 1.4))
-    face.append((sk.catmull([(0, 160), (4, 156.5), (8.5, 159)], n=6), 1.4))
+    face.append(([(0, 162.5), (0, 160)], 1.4))
+    mouth = front_line(sk.catmull([(-9, 159.5), (-4.5, 156), (0, 159.5), (4.5, 156), (9, 159.5)], n=6))
+    bright.append(mouth.buffer(1.5))
+    bright.append(front_poly([(-5, 169.5), (5, 169.5), (0, 162.5)]))
     for x0 in (-7, 0, 7):
         face.append(([(x0, 220), (x0 * 0.8, 211)], 1.8))
     for pts, wd in face:
         lead_lines.append((front_line(pts), wd))
-    lead_polys.append(front_poly([(-4.5, 169), (4.5, 169), (0, 162.5)]).buffer(0.6))
     # back of the head: brow ring continues round the back, plus meridians
     ub = x_to_u(w - 4, 196)
     for s in (1, -1):
@@ -264,10 +275,20 @@ def design():
     for z in (HZ0, HZ1):
         lead_lines.append((LineString([(-U_HALF - 1, z), (U_HALF + 1, z)]), WALL))
 
+    bright_u = unary_union(bright)
+    for g in getattr(bright_u, "geoms", [bright_u]):
+        lead_lines.append((g.exterior, 1.6))    # rib frame round each bright feature
     leads = unary_union([g.buffer(wd / 2, cap_style=1, join_style=1) for g, wd in lead_lines] + lead_polys)
-    panel_area = unary_union([dom.difference(heart.buffer(WALL * 0.6)), heart.buffer(-WALL * 0.6), hdom])
-    panels = panel_area.difference(leads)
+    bright_u = bright_u.difference(leads)
+    panel_area = unary_union([dom.difference(heart.buffer(WALL * 0.6)), hdom])
+    panels = panel_area.difference(leads).difference(bright_u.buffer(0.01))
     panels = [g for g in getattr(panels, "geoms", [panels]) if g.area > 3]
+    bright_panels = [g for g in getattr(bright_u, "geoms", [bright_u]) if g.area > 2]
+    return leads, panels, bright_panels, dict(body=(BZ0, BZ1), head=(HZ0, HZ1))
+
+
+def _unused_openings(panels, heart, rng, BZ1):
+    """Round 3 picked open panels here. The sides are now closed (owner's choice); kept for reference."""
     # -- openings: some body panels, plus the heart window ------------------------------------
     cand = []
     for g in panels:
@@ -280,8 +301,7 @@ def design():
         if hole.area > 45:
             cand.append(hole)
     rng.shuffle(cand)
-    openings = cand[: int(len(cand) * 0.55)] + [pointed(window)]
-    return leads, panels, openings, dict(body=(BZ0, BZ1), head=(HZ0, HZ1))
+    return cand[: int(len(cand) * 0.55)]
 
 
 # ---- Pattern -> solids ------------------------------------------------------------------------
@@ -353,6 +373,53 @@ def ring_and_bowl():
     return Manifold.revolve(CrossSection([np.array(prof)], m3.FillRule.EvenOdd), 256)
 
 
+def ear_glow(sign):
+    """Cut that thins a triangle on the ear's front face to SKIN_BRIGHT from the inside."""
+    tri = CrossSection([np.array([[sign * 40.0, 226.0], [sign * 59.0, 224.0], [sign * 50.0, 243.0]])],
+                       m3.FillRule.EvenOdd)
+    prism = Manifold.extrude(tri, 60.0).rotate([90, 0, 0]).translate([0, 20.0, 0])  # spans y -40..20
+    out = ear(sign)
+    slab = out.translate([0, SKIN_BRIGHT / math.cos(math.radians(18)), 0]) - out.translate([0, 3.2, 0])
+    return prism ^ slab ^ out
+
+
+def bowl_windows():
+    """Light windows in the 45-degree bowl: one between each pair of radial spokes. The inner end
+    is pointed (half-width grows WIN_TAPER per mm), so each layer still rests on the one below."""
+    wins = []
+    pitch = 2 * math.pi / BOWL_WINDOWS
+    for k in range(BOWL_WINDOWS):
+        left, right = [], []
+        for r in np.arange(WIN_R0, 100.0, 0.5):
+            hw = min(WIN_TAPER * (r - WIN_R0), (pitch * r - SPOKE_W) / 2)
+            a = hw / r
+            left.append((r * math.cos(-a), r * math.sin(-a)))
+            right.append((r * math.cos(a), r * math.sin(a)))
+        poly = np.array(left + right[::-1][:-1])
+        cs = CrossSection([poly], m3.FillRule.EvenOdd).rotate(math.degrees(k * pitch + pitch / 2))
+        wins.append(Manifold.extrude(cs, 90.0).translate([0, 0, -10.0]))
+    return Manifold.batch_boolean(wins, m3.OpType.Add)
+
+
+def adapter_z0():
+    """Height (body coordinates) of the adapter's flat bottom = the socket shoulder."""
+    ri = RING_ID / 2
+    zl = RING_Z - RING_T
+    return zl - (ADAPTER_OD / 2 - ri) - ADAPTER_GAP - ADAPTER_BASE
+
+
+def adapter():
+    """Separate ring between the socket shoulder and the shade's 45-degree cone. Flat bottom,
+    45-degree cone on top (ADAPTER_GAP below the shade cone), 0.5 mm flat at the bore.
+    Built in body coordinates; printed upside up on its flat bottom."""
+    ri, ro = RING_ID / 2, ADAPTER_OD / 2
+    zl = RING_Z - RING_T
+    z0 = adapter_z0()
+    top = lambda r: zl - (r - ri) - ADAPTER_GAP  # noqa: E731
+    prof = [(ri, z0), (ro, z0), (ro, top(ro)), (ri + 0.5, top(ri + 0.5)), (ri, top(ri + 0.5))]
+    return Manifold.revolve(CrossSection([np.array(prof)], m3.FillRule.EvenOdd), 256)
+
+
 def lip_and_support():
     """Lip on the body that locates the head, carried by a 45-degree ledge on the inside."""
     a = WALL + LIP_GAP
@@ -367,21 +434,25 @@ def lip_and_support():
 
 
 def build():
-    leads, panels, openings, doms = design()
-    print(f"pattern: {len(panels)} panels, {len(openings)} openings")
+    leads, panels, bright, doms = design()
+    print(f"pattern: {len(panels)} panels, {len(bright)} bright features, no side openings")
     outer = loft(0.0, 0.0, Z_TOP)
     inner = loft(WALL, -1.0, Z_TOP)
     shell = (outer + ear(1) + ear(-1)) - (inner + ear(1, True) + ear(-1, True))
-    # thin panels, recessed from the inside in 0.5 mm stages
+    # thin panels, recessed from the inside in STEP stages; bright features go one stage deeper
     P = unary_union(panels)
+    PB = unary_union(bright)
     cut = Manifold()
-    depths = np.arange(SKIN, WALL - 1e-6, STEP)
-    for i, d in enumerate(depths):
+    depths = np.arange(SKIN_BRIGHT, WALL - 1e-6, STEP)
+    for d in depths:
         band = loft(d, -1.0, Z_TOP) - loft(d + STEP, -1.0, Z_TOP) if d + STEP < WALL - 1e-6 else loft(d, -1.0, Z_TOP)
-        cut += wedge(lower_top(P, i * STEP_DZ)) ^ band
+        ib = int(round((d - SKIN_BRIGHT) / STEP))
+        geom = lower_top(PB, ib * STEP_DZ)
+        if d >= SKIN - 1e-6:
+            geom = unary_union([geom, lower_top(P, int(round((d - SKIN) / STEP)) * STEP_DZ)])
+        cut += wedge(geom) ^ band
     shell -= cut
-    # openings
-    shell -= wedge(unary_union(openings))
+    shell -= ear_glow(1) + ear_glow(-1)
     # embossed leads, with a stepped underside
     emb = Manifold()
     lead_area = leads.intersection(box(-U_HALF, 0.0, U_HALF, Z_TOP - 14))
@@ -396,8 +467,9 @@ def build():
     body = shell.trim_by_plane([0, 0, -1], -NECK)
     head = shell.trim_by_plane([0, 0, 1], NECK)
     bowl = ring_and_bowl() ^ loft(0.4, 0.0, NECK)
+    bowl -= bowl_windows() ^ loft(WALL + 4.0, -1.0, NECK)
     body = body + bowl + lip_and_support()
-    return main_solid(body), main_solid(head), (leads, panels, openings, doms)
+    return main_solid(body), main_solid(head), adapter(), (leads, panels, bright, doms)
 
 
 def main_solid(man):
@@ -459,9 +531,13 @@ def export_clean(man, path):
 def main():
     OUT.mkdir(exist_ok=True)
     print(f"profile: steepest outward slope {check_profiles():.1f} deg (limit 45)")
-    body, head, pat = build()
+    body, head, adp, pat = build()
     report = []
-    for name, man in (("body", body), ("head", head)):
+    fit = (adp ^ body).volume()
+    print(f"adapter: shoulder at z {adapter_z0():.1f}, overlap with body {fit:.3f} mm3 (must be 0), "
+          f"stack at the hole {RING_Z - adapter_z0():.1f} mm")
+    adp_flat = adp.translate([0, 0, -adapter_z0()])
+    for name, man in (("body", body), ("head", head), ("adapter", adp_flat)):
         man, tm = export_clean(man, OUT / f"cat_shade_{name}.stl")
         _, uses = np.unique(tm.edges_sorted, axis=0, return_counts=True)
         r = np.linalg.norm(tm.vertices[:, :2], axis=1).max()
@@ -477,7 +553,7 @@ def main():
     return report
 
 
-def write_pattern_svg(leads, panels, openings, doms):
+def write_pattern_svg(leads, panels, bright, doms):
     s = 2.0
     W = 2 * U_HALF * s + 40
     Hh = (H + 10) * s + 40
@@ -493,7 +569,7 @@ def write_pattern_svg(leads, panels, openings, doms):
     svg = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W:.0f} {Hh:.0f}" font-family="Inter, sans-serif">',
            f'<rect width="{W:.0f}" height="{Hh:.0f}" fill="#fbfaf7"/>']
     svg.append(f'<path d="{path(unary_union(panels))}" fill="#f7c46c" fill-rule="evenodd"/>')
-    svg.append(f'<path d="{path(unary_union(openings))}" fill="#ffffff" stroke="#7aa7d6" stroke-width="0.8" fill-rule="evenodd"/>')
+    svg.append(f'<path d="{path(unary_union(bright))}" fill="#fff3c4" fill-rule="evenodd"/>')
     svg.append(f'<path d="{path(leads.intersection(box(-U_HALF, 0, U_HALF, H)))}" fill="#2b2620" fill-rule="evenodd"/>')
     for z in (NECK, RING_Z):
         y = 20 + (H + 5 - z) * s
