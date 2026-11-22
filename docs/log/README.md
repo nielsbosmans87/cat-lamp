@@ -7,3 +7,4 @@ Write entries in B2 English. Follow `.agents/rules/communication.md`.
 | ---- | ----- | ------- | -----: |
 | 2026-11-22 | [Five shade concepts](2026-11-22_shade-concepts.md) | industrial design | 5 |
 | 2026-11-22 | [Round 2: cuter sitting cat](2026-11-22_round-2-cute-cat.md) | industrial design | 5 |
+| 2026-11-22 | [First 3D model of 1C](2026-11-22_3d-model-1c.md) | 3D design, mechanical | 7 |
