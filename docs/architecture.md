@@ -18,7 +18,8 @@ Fixed requirements: 250 mm high (was 200 mm in round 1), fits in a Ø160 mm cyli
 | `sketches/` | Concept sketches (SVG); round 2 in `sketches/round-2/` |
 | `cad/cat_shade.py` | Parametric 3D model of concept 1C: builds, checks and exports both parts |
 | `cad/out/` | Print files: `cat_shade_body`, `cat_shade_head` and `cat_shade_adapter` (.stl and .3mf), `pattern.svg` |
-| `cad/renders/` | Review renders of the current model |
+| `cad/render_lit.py` | Realistic lit renders (Blender Cycles) of the cat on the lamp base |
+| `cad/renders/` | Review renders (`*.png`) and lit renders (`lit_*.png`) of the current model |
 | `.agents/` | Shared agent kit (git submodule, refaqt/refaqt-agents) |
 | `docs/` | Log, decisions, mistakes |
 
@@ -27,3 +28,4 @@ Fixed requirements: 250 mm high (was 200 mm in round 1), fits in a Ø160 mm cyli
 - Change the design: edit the parameters and outline profiles at the top of `cad/cat_shade.py`,
   then run `python3 cad/cat_shade.py` (about 5 minutes). It prints the checks for both parts.
 - Needs Python with numpy, shapely, scipy, manifold3d and trimesh (plus networkx and lxml for .3mf).
+- Lit renders: `pip install bpy` (Blender 5.3 as a Python module), then `python3 cad/render_lit.py` (a few minutes per image).

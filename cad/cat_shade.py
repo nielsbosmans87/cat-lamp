@@ -51,6 +51,8 @@ BOWL_WINDOWS = 24    # light windows in the bowl, between radial spokes
 SPOKE_W = 3.0        # spoke width between bowl windows
 WIN_R0 = 27.0        # radius where the pointed inner end of each window starts
 WIN_TAPER = 0.25     # half-width growth per mm of radius (keeps the window tops near 45 degrees)
+RIB_T_BOTTOM = 4.0   # rib under each spoke: thickness where it starts on the bed at the wall
+RIB_T_TOP = 2.4      # rib thickness where it meets the ring
 ADAPTER_OD = 40.0    # separate adapter ring: flat bottom on the socket shoulder, cone on top
 ADAPTER_BASE = 1.5   # adapter thickness at its outer edge
 ADAPTER_GAP = 0.1    # clearance between adapter cone and shade cone
@@ -401,6 +403,37 @@ def bowl_windows():
     return Manifold.batch_boolean(wins, m3.OpType.Add)
 
 
+def bowl_ribs():
+    """A triangular rib under each spoke, in the radial plane. It starts on the build plate at the
+    inside wall and rises in a straight edge to the ring, so every layer rests on the one below.
+    Thick at the bottom (RIB_T_BOTTOM), thinner at the ring (RIB_T_TOP).
+    Returns the ribs and the steepest bottom-edge angle from vertical (must be <= 45)."""
+    ri, ro = RING_ID / 2, RING_OD / 2
+    zl = RING_Z - RING_T
+    zo = zl - (ro - ri) + BOWL_T * math.sqrt(2)
+    z_up = lambda r: zo - (r - ro)  # noqa: E731  bowl upper surface
+    rp = ring_pts(0.0, WALL)
+    ang = np.arctan2(rp[:, 1], rp[:, 0])
+    rad = np.hypot(rp[:, 0], rp[:, 1])
+    pitch = 2 * math.pi / BOWL_WINDOWS
+    ribs, worst = [], 0.0
+    top_ring = (ro - 0.5, zo - 0.2)
+    for k in range(BOWL_WINDOWS):
+        phi = k * pitch
+        d = np.abs((ang - phi + np.pi) % (2 * np.pi) - np.pi)
+        r_w = float(rad[np.argmin(d)]) + 1.5
+        e = np.array([math.cos(phi), math.sin(phi), 0.0])
+        t = np.array([-math.sin(phi), math.cos(phi), 0.0])
+        pts = []
+        for (r, z), th in (((r_w, 0.0), RIB_T_BOTTOM), ((r_w, z_up(r_w) - 0.3), RIB_T_BOTTOM),
+                           (top_ring, RIB_T_TOP)):
+            for sgn in (-1, 1):
+                pts.append(r * e + sgn * th / 2 * t + np.array([0, 0, z]))
+        ribs.append(Manifold.hull_points(np.array(pts)))
+        worst = max(worst, math.degrees(math.atan2(r_w - top_ring[0], top_ring[1])))
+    return Manifold.batch_boolean(ribs, m3.OpType.Add), worst
+
+
 def adapter_z0():
     """Height (body coordinates) of the adapter's flat bottom = the socket shoulder."""
     ri = RING_ID / 2
@@ -468,6 +501,9 @@ def build():
     head = shell.trim_by_plane([0, 0, 1], NECK)
     bowl = ring_and_bowl() ^ loft(0.4, 0.0, NECK)
     bowl -= bowl_windows() ^ loft(WALL + 4.0, -1.0, NECK)
+    ribs, rib_angle = bowl_ribs()
+    print(f"bowl ribs: start on the bed at the wall, steepest bottom edge {rib_angle:.1f} deg from vertical (limit 45)")
+    bowl += ribs ^ loft(0.4, 0.0, NECK)
     body = body + bowl + lip_and_support()
     return main_solid(body), main_solid(head), adapter(), (leads, panels, bright, doms)
 

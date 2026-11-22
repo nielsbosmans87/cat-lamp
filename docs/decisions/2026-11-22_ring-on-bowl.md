@@ -19,6 +19,10 @@ With three or six ribs, the lowest layer of the ring hangs in the air between th
   Stack on the thread: 12.6 mm.
 - Update (round 4): the bowl has 24 light windows between 3 mm radial spokes. Each window has a pointed inner end
   (half-width grows 0.25 mm per mm of radius), so the bowl still prints without supports.
+- Update (round 5): thin 45-degree spokes could sag while printing. Under each spoke there is now a triangular rib
+  in the radial plane. It starts on the build plate at the inside wall and rises in a straight edge to the ring
+  (at most 42.4 degrees from vertical). It is 4.0 mm thick at the bottom and 2.4 mm at the ring. Every layer of
+  the bowl now rests on a rib or on the layer below.
 
 ## Consequences
 
