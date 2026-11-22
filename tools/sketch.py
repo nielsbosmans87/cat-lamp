@@ -327,6 +327,7 @@ class View:
 # ---- Common parts drawn in every elevation ----------------------------------------------------
 def draw_internals(v, wall_r_at):
     """Mounting ring (cone washer), support ribs, E14 socket and bulb as hidden lines."""
+    BULB_Z0 = RING_Z + 8.0
     dash = 'stroke-dasharray="5 3"'
     # socket and lamp stem below
     v.poly([(-15, -22), (15, -22), (15, RING_Z + 6), (-15, RING_Z + 6)], fill="#00000008", stroke=HID, sw=0.9,
@@ -412,7 +413,7 @@ def render_elevation(sh, ox, oy, title, el, check):
         if i in opened:
             v.poly(list(opened[i].exterior.coords), fill="url(#hatch)", stroke=INK, sw=1.2)
     for f in feats:
-        fill = {"open": "url(#hatch)", "thin": "url(#glow)", "solid": SOLID, "line": "none"}[f["kind"]]
+        fill = {"open": "url(#hatch)", "thin": "url(#glow)", "solid": SOLID, "dark": "#5a5248", "blush": "#f4a7a0", "line": "none"}[f["kind"]]
         if f["kind"] == "line":
             v.line(f["pts"], stroke=INK, sw=f.get("sw", LEAD) * S)
         else:
@@ -428,7 +429,7 @@ def render_elevation(sh, ox, oy, title, el, check):
         if not sl.is_empty:
             (a, _), (b, _) = sl.coords[0], sl.coords[-1]
             v.line([(a - 6, zc), (b + 6, zc)], stroke="#c0392b", sw=1.6, extra='stroke-dasharray="9 4"')
-            v.text(b + 8, zc, "lift-off cap", size=11, anchor="start", color="#c0392b", dy=4)
+            v.text(b + 8, zc, el.get("split_label", "lift-off cap"), size=11, anchor="start", color="#c0392b", dy=4)
 
     # internals
     def wall_r_at(sgn):
@@ -467,7 +468,7 @@ def render_top(sh, ox, oy, top, el_front):
            extra='stroke-dasharray="2 4"')
     v.poly(outline, fill="url(#glow)", stroke=INK, sw=4.2)
     for f in top.get("features", []):
-        fill = {"open": "url(#hatch)", "thin": "url(#glow)", "solid": SOLID, "line": "none"}[f["kind"]]
+        fill = {"open": "url(#hatch)", "thin": "url(#glow)", "solid": SOLID, "dark": "#5a5248", "blush": "#f4a7a0", "line": "none"}[f["kind"]]
         if f["kind"] == "line":
             v.line(f["pts"], stroke=INK, sw=f.get("sw", LEAD) * S)
         else:
@@ -497,17 +498,17 @@ def render_top(sh, ox, oy, top, el_front):
 
 
 def render(c, idx):
-    W, Hh = 1220, 660
+    ground = int(165 + H * S)
+    W, Hh = 1220, ground + 140
     sh = Sheet(W, Hh)
-    sh.add(f'<text x="24" y="38" font-size="22" font-weight="700" fill="{INK}">Concept {idx} — {c["name"]}</text>')
+    sh.add(f'<text x="24" y="38" font-size="22" font-weight="700" fill="{INK}">Concept {c.get("label", idx)} — {c["name"]}</text>')
     sh.add(f'<text x="24" y="60" font-size="13" fill="#5b554c">{c["tagline"]}</text>')
     sh.add(f'<text x="{W - 24}" y="38" font-size="12" text-anchor="end" fill="#5b554c">All dimensions in mm · '
            f'concept sketch, not final geometry</text>')
-    ground = 520
     checks = []
     render_elevation(sh, 210, ground, "FRONT", c["front"], checks)
     render_elevation(sh, 590, ground, "SIDE", c["side"], checks)
-    rmax = render_top(sh, 980, 300, c["top"], c["front"])
+    rmax = render_top(sh, 980, ground - H * S / 2 - 30, c["top"], c["front"])
     sh.add(f'<text x="980" y="{ground + 30}" font-size="12" text-anchor="middle" fill="{INK}">'
            f'access: {c["access"]}</text>')
     sh.add(f'<text x="980" y="{ground + 48}" font-size="12" text-anchor="middle" fill="#1e7d32">'
